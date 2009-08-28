@@ -20,9 +20,7 @@
 (defn get-str-length [s]
   (Integer/parseInt (apply str (take-while #(not (= \: %)) s))))
 
-;; (defn dict-pair [[k v]]
-;;   (format "%s%s" (encode-s k) (encode-any v)))
-
+;; -------------------- encode --------------------
 
 (defn encode-i [i]
   (format "i%se" i))
@@ -30,37 +28,16 @@
 (defn encode-s [s]
   (format "%s:%s" (count s) s))
 
-;; (defn encode-d [m]
-;;   (format "d%se"
-;; 	  (apply str (map dict-pair m))
-;; 	  ))
 
-
-;; (defn encode-l [l]
-;;   "le")
-;;   ;; (format "l%se" (apply str (map encode-any l))))
-
-
-
-(defn encode-any [x]
-  (loop [rw x front [] back '()]
+(defn encode-any [rw]
     (cond
-      (integer? rw) (recur  nil (conj front (encode-i rw)) back)
-      (string? rw) (recur nil (conj front (encode-s rw)) back)
-      ;; (map? x) (encode-d x)
-      (coll? rw) (if (empty? rw)
-		   (do (println ^rw)
-		     (recur nil
-			  (conj front (if (:seen rw) "" "l"))
-			  (conj back (if (:seen rw) "" "e"))))
-		   (do (println ^rw)
-		       (recur (with-meta (rest rw) {:seen true})
-			  (conj front (if (:seen rw) "" "l") (encode-any (first rw)))
-			  (conj back (if (:seen rw) "" "e")))))
-      (nil? rw) (apply str (into front back))
-      )))
+      (integer? rw) (encode-i rw)
+      (string? rw) (encode-s rw)
+      (map? rw) (str "d" (apply str (map encode-any (interleave (keys rw) (vals rw)))) "e")
+      (and (not (map? rw)) (coll? rw)) (str "l" (apply str (map encode-any rw)) "e")
+      ))
 
-
+;; -------------------- decode --------------------
 
 ;; Switch to tokenize style
 
@@ -90,6 +67,13 @@
   (is (= (encode-any 10) "i10e"))
   (is (= (encode-any []) "le"))
   (is (= (encode-any [1 2 3]) "li1ei2ei3ee"))
+  (is (= (encode-any ["Fish" "Cat"]) "l4:Fish3:Cate"))
+  (is (= (encode-any ["Fish" "Cat" 5]) "l4:Fish3:Cati5ee"))
+  (is (= (encode-any {}) "de"))
+  (is (= (encode-any {"name" "bob" "age" 34}) "d4:name3:bob3:agei34ee"))
+  (is (= (encode-any {"Names" ["Bob" "Jane" "Clara" "Jen"] "Count" 3})
+  	 "d5:Namesl3:Bob4:Jane5:Clara3:Jene5:Counti3ee"))
+
   )
 
 ;; (deftest decode-any-test
@@ -121,15 +105,15 @@
 ;; 	 "d5:Namesl3:Bob4:Jane5:Clara3:Jene5:Counti3ee"))
 ;; )
 
-;; (deftest encode-many
-;;   (is (= (encode-any {"Name" "James"
-;; 		      "Age" 22
-;; 		      "Relatives" ["Bob" "James" "Jenny"]
-;; 		      "Address" {"Street" "Smith"
-;; 				 "Suburb" "Preston"
-;; 				 "Postcode" 5425}})
-;; 	 "d4:Name5:James3:Agei22e9:Relativesl3:Bob5:James5:Jennye7:Addressd6:Street5:Smith6:Suburb7:Preston8:Postcodei5425eee"))
-;; )
+(deftest encode-many
+  (is (= (encode-any {"Name" "James"
+		      "Age" 22
+		      "Relatives" ["Bob" "James" "Jenny"]
+		      "Address" {"Street" "Smith"
+				 "Suburb" "Preston"
+				 "Postcode" 5425}})
+	 "d4:Name5:James3:Agei22e9:Relativesl3:Bob5:James5:Jennye7:Addressd6:Street5:Smith6:Suburb7:Preston8:Postcodei5425eee"))
+)
 
 ;; Final test
 ;; d
