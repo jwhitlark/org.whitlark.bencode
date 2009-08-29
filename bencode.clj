@@ -10,32 +10,22 @@
      (flush)
      value#))
 
-
-(defn digit? [c]
-  (contains? (set (map #(str %)(range 10))) (str c)))
-
-(defn drop-first-and-last [s]
-  (apply str (drop-last (rest s))))
-
-(defn get-str-length [s]
-  (Integer/parseInt (apply str (take-while #(not (= \: %)) s))))
-
 ;; -------------------- encode --------------------
 (defn- seq-k-and-v [m]
   "There must be a better way"
   (interleave (keys m) (vals m)))
 
-(defn- make-str-and-delimit [delimiter f coll]
-  (concat delimiter (map f coll) "e"))
+(defn- handle-collection [delimiter f coll]
+  (apply str (lazy-seq (concat delimiter (map f coll) "e"))))
 
-(defn- bencode-type [x & _]
+(defn- encode-bencode-type [x & _]
   (cond
     (integer? x)			:integer
     (string? x)				:string
     (map? x)				:map
     (and (not (map? x)) (coll? x))	:coll))
 
-(defmulti encode bencode-type)
+(defmulti encode encode-bencode-type)
 
 (defmethod encode :integer [x]
   (format "i%se" x))
@@ -45,34 +35,58 @@
 
 (defmethod encode :coll [x]
   "Not sure if lazy-seq has any meaning in this case, how to test?"
-  (apply str (lazy-seq (make-str-and-delimit "l" encode x))))
+  (handle-collection "l" encode x))
 
 (defmethod encode :map [x]
-  (apply str (lazy-seq (make-str-and-delimit "d" encode (seq-k-and-v x)))))
+  (handle-collection "d" encode (seq-k-and-v x)))
 
 ;; -------------------- decode --------------------
+(defn- digit? [c]
+  (contains? (set (map #(str %)(range 10))) (str c)))
 
-;; Switch to tokenize style
+(defn- drop-first-and-last [s]
+  (apply str (drop-last (rest s))))
 
-;; (defn decode-any [x]
-;;   (cond
-;;     (= \i (first x)) (decode-i x)
-;;     (digit? (first x)) (decode-s x)
-;;   ))
+(defn- get-str-length [s]
+  (Integer/parseInt (apply str (take-while #(not (= \: %)) s))))
 
-;; (defn decode-i [i]
-;;   (Integer/parseInt (drop-first-and-last i)))
+(defn- decode-bencode-type [x & _]
+  (cond
+    (= \i (first x))	:integer
+    (digit? (first x))	:string
+    (= \d (first x))	:map
+    (= \l (first x))	:coll
+;;    (empty? x)          :done
+    ))
 
-;; (defn decode-s [s]
-;;   (let [len (get-str-length s)]
-;;     (apply str (take len (drop (inc (count (str len))) s)))
-;;     ))
+(defmulti decode decode-bencode-type)
 
+(defmethod decode :integer [remaining stack accum]
+  (let [end-idx (.indexOf remaining "e")
+	integer (Integer/parseInt (.substring remaining 1 end-idx))]
+    integer))
+
+(defmethod decode :string [remaining stack accum]
+  (let [str-len (get-str-length remaining)
+	len-len (inc (count (str str-len)))
+	total-len (+ len-len str-len)
+	string (.substring remaining len-len total-len)]
+    string))
+
+;; (defmethod decode :done [remaining stack accum]
+;;   accum)
+
+;; (defmethod decode :coll [x]
+;;   (
 ;; ---------- Tests ----------
 
 (deftest digit-test
   (is (digit? "1"))
   (is (not (digit? "a")))
+  (is (= (decode-bencode-type "i33e") :integer))
+  (is (= (decode-bencode-type "4:Fish") :string ))
+  (is (= (decode-bencode-type "li1ei2ei3ee") :coll))
+  (is (= (decode-bencode-type  "d4:name3:bob3:agei34ee") :map))
 )
 
 (deftest encode-any-test
@@ -86,37 +100,15 @@
   (is (= (encode {"name" "bob" "age" 34}) "d4:name3:bob3:agei34ee"))
   (is (= (encode {"Names" ["Bob" "Jane" "Clara" "Jen"] "Count" 3})
   	 "d5:Namesl3:Bob4:Jane5:Clara3:Jene5:Counti3ee"))
-
   )
 
-;; (deftest decode-any-test
-;;   (is (= (decode-any "4:Fish") "Fish" ))
-;;   (is (= (decode-any "i10e") 10 ))
-;;   )
-
-
-;; (deftest decode-string
-;;   (is (= (decode-s "4:Fish") "Fish"))
-;; )
-
-;; (deftest decode-int
-;;   (is (= (decode-i "i10e") 10))
-;; )
-
-;; (deftest encode-list
-
-;;   ;; (is (= (encode-any ["Fish" "Cat"]) "l4:Fish3:Cate"))
-
-;;   ;; (is (= (encode-any ["Fish" "Cat" 5]) "l4:Fish3:Cati5ee"))
-
-;;   )
-
-;; (deftest encode-dict
-;;   (is (= (encode-d {}) "de"))
-;;   (is (= (encode-d {"name" "bob" "age" 34}) "d4:name3:bob3:agei34ee"))
-;;   (is (= (encode-d {"Names" ["Bob" "Jane" "Clara" "Jen"] "Count" 3})
-;; 	 "d5:Namesl3:Bob4:Jane5:Clara3:Jene5:Counti3ee"))
-;; )
+(deftest decode-any-test
+  (is (= (decode "4:Fish" [] []) "Fish" ))
+  (is (= (decode "i10e" [] []) 10 ))
+  ;; (is (= (decode "le") [] ))
+  ;; le -> :list-start :list-end
+  ;; l4:Fishi10ee -> :list-start 4:Fish i10e :list-end
+  )
 
 (deftest encode-many
   (is (= (encode {"Name" "James"
