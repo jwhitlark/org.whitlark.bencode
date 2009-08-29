@@ -20,13 +20,13 @@
 (defn get-str-length [s]
   (Integer/parseInt (apply str (take-while #(not (= \: %)) s))))
 
-(defn seq-k-and-v [m]
+;; -------------------- encode --------------------
+(defn- seq-k-and-v [m]
   "There must be a better way"
   (interleave (keys m) (vals m)))
 
-(defn make-str-and-delimit [delimiter f coll]
-  (str delimiter (apply str (map f coll)) "e"))
-;; -------------------- encode --------------------
+(defn- make-str-and-delimit [delimiter f coll]
+  (concat delimiter (map f coll) "e"))
 
 (defn- bencode-type [x & _]
   (cond
@@ -35,24 +35,20 @@
     (map? x)				:map
     (and (not (map? x)) (coll? x))	:coll))
 
+(defmulti encode bencode-type)
 
+(defmethod encode :integer [x]
+  (format "i%se" x))
 
-(defn encode-i [i]
-  (format "i%se" i))
+(defmethod encode :string [x]
+  (format "%s:%s" (count x) x))
 
-(defn encode-s [s]
-  (format "%s:%s" (count s) s))
+(defmethod encode :coll [x]
+  "Not sure if lazy-seq has any meaning in this case, how to test?"
+  (apply str (lazy-seq (make-str-and-delimit "l" encode x))))
 
-
-
-
-(defn encode-any [rw]
-    (cond
-      (integer? rw) (encode-i rw)
-      (string? rw) (encode-s rw)
-      (map? rw) (make-str-and-delimit "d" encode-any (seq-k-and-v rw))
-      (and (not (map? rw)) (coll? rw)) (make-str-and-delimit "l" encode-any rw)
-      ))
+(defmethod encode :map [x]
+  (apply str (lazy-seq (make-str-and-delimit "d" encode (seq-k-and-v x)))))
 
 ;; -------------------- decode --------------------
 
@@ -80,15 +76,15 @@
 )
 
 (deftest encode-any-test
-  (is (= (encode-any "Fish") "4:Fish"))
-  (is (= (encode-any 10) "i10e"))
-  (is (= (encode-any []) "le"))
-  (is (= (encode-any [1 2 3]) "li1ei2ei3ee"))
-  (is (= (encode-any ["Fish" "Cat"]) "l4:Fish3:Cate"))
-  (is (= (encode-any ["Fish" "Cat" 5]) "l4:Fish3:Cati5ee"))
-  (is (= (encode-any {}) "de"))
-  (is (= (encode-any {"name" "bob" "age" 34}) "d4:name3:bob3:agei34ee"))
-  (is (= (encode-any {"Names" ["Bob" "Jane" "Clara" "Jen"] "Count" 3})
+  (is (= (encode "Fish") "4:Fish"))
+  (is (= (encode 10) "i10e"))
+  (is (= (encode []) "le"))
+  (is (= (encode [1 2 3]) "li1ei2ei3ee"))
+  (is (= (encode ["Fish" "Cat"]) "l4:Fish3:Cate"))
+  (is (= (encode ["Fish" "Cat" 5]) "l4:Fish3:Cati5ee"))
+  (is (= (encode {}) "de"))
+  (is (= (encode {"name" "bob" "age" 34}) "d4:name3:bob3:agei34ee"))
+  (is (= (encode {"Names" ["Bob" "Jane" "Clara" "Jen"] "Count" 3})
   	 "d5:Namesl3:Bob4:Jane5:Clara3:Jene5:Counti3ee"))
 
   )
@@ -123,7 +119,7 @@
 ;; )
 
 (deftest encode-many
-  (is (= (encode-any {"Name" "James"
+  (is (= (encode {"Name" "James"
 		      "Age" 22
 		      "Relatives" ["Bob" "James" "Jenny"]
 		      "Address" {"Street" "Smith"
