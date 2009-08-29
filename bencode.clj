@@ -76,8 +76,13 @@
 ;; (defmethod decode :done [remaining stack accum]
 ;;   accum)
 
-;; (defmethod decode :coll [x]
-;;   (
+(defmethod decode :coll [remaining stack accum]
+  (let [contents (drop-first-and-last remaining)
+	]
+    (cond
+      (empty? contents) []
+      )))
+
 ;; ---------- Tests ----------
 
 (deftest digit-test
