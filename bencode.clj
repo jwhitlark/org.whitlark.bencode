@@ -20,7 +20,22 @@
 (defn get-str-length [s]
   (Integer/parseInt (apply str (take-while #(not (= \: %)) s))))
 
+(defn seq-k-and-v [m]
+  "There must be a better way"
+  (interleave (keys m) (vals m)))
+
+(defn make-str-and-delimit [delimiter f coll]
+  (str delimiter (apply str (map f coll)) "e"))
 ;; -------------------- encode --------------------
+
+(defn- bencode-type [x & _]
+  (cond
+    (integer? x)			:integer
+    (string? x)				:string
+    (map? x)				:map
+    (and (not (map? x)) (coll? x))	:coll))
+
+
 
 (defn encode-i [i]
   (format "i%se" i))
@@ -29,12 +44,14 @@
   (format "%s:%s" (count s) s))
 
 
+
+
 (defn encode-any [rw]
     (cond
       (integer? rw) (encode-i rw)
       (string? rw) (encode-s rw)
-      (map? rw) (str "d" (apply str (map encode-any (interleave (keys rw) (vals rw)))) "e")
-      (and (not (map? rw)) (coll? rw)) (str "l" (apply str (map encode-any rw)) "e")
+      (map? rw) (make-str-and-delimit "d" encode-any (seq-k-and-v rw))
+      (and (not (map? rw)) (coll? rw)) (make-str-and-delimit "l" encode-any rw)
       ))
 
 ;; -------------------- decode --------------------
