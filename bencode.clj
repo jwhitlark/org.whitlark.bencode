@@ -56,33 +56,53 @@
     (digit? (first x))	:string
     (= \d (first x))	:map
     (= \l (first x))	:coll
+    (= \e (first x))	:end
 ;;    (empty? x)          :done
     ))
 
-(defmulti decode decode-bencode-type)
+(defmulti decode- decode-bencode-type)
 
-(defmethod decode :integer [remaining stack accum]
+(defmethod decode- :integer [remaining]
   (let [end-idx (.indexOf remaining "e")
-	integer (Integer/parseInt (.substring remaining 1 end-idx))]
-    integer))
+	integer (Integer/parseInt (.substring remaining 1 end-idx))
+	new-remaining (.substring remaining (inc end-idx))]
+    (list integer new-remaining)))
 
-(defmethod decode :string [remaining stack accum]
+(defmethod decode- :string [remaining]
   (let [str-len (get-str-length remaining)
 	len-len (inc (count (str str-len)))
 	total-len (+ len-len str-len)
-	string (.substring remaining len-len total-len)]
-    string))
+	string (.substring remaining len-len total-len)
+	new-remaining (.substring remaining total-len)]
+    (list string new-remaining)))
+
+(defmethod decode- :end [remaining]
 
 ;; (defmethod decode :done [remaining stack accum]
 ;;   accum)
 
-(defmethod decode :coll [remaining stack accum]
-  (let [contents (drop-first-and-last remaining)
-	]
-    (cond
-      (empty? contents) []
-      )))
+;; (defmethod decode- :coll [remaining]
+;;   (let [contents (drop-first-and-last remaining)
+;; 	]
+;;     (if
+;; 	(empty? contents)
+;;       (list [] "")
+;;       (loop [unparsed contents
+;; 	     found []]
+;; 	(cond
+;; 	  (empty? unparsed) (list found [])
+;; 	  (= (.charAt unparsed 0) \e) (list found unparsed)
+;; 	  :else (let [result (decode- contents)
+;; 		      cur-val (first result)
+;; 		      remaining (second result)]
+;; 		  (recur remaining (conj found cur-val)))
+;; 	  )))))
 
+(defn decode [s]
+  (first (decode- s )))
+; conj will work for adding to current coll or map, needs seq if it's a map
+; decode needs to set top level data structure
+; str and int return themselves, list and dict remove first char, and call themselves, returning a structure once an unmatched \e is found.  decode then combines these results?
 ;; ---------- Tests ----------
 
 (deftest digit-test
@@ -108,9 +128,13 @@
   )
 
 (deftest decode-any-test
-  (is (= (decode "4:Fish" [] []) "Fish" ))
-  (is (= (decode "i10e" [] []) 10 ))
-  ;; (is (= (decode "le") [] ))
+  (is (= (decode "4:Fish") "Fish" ))
+  (is (= (decode "i10e") 10 ))
+  (is (= (decode "le") [] ))
+  (is (= (decode "l4:Fishe") ["Fish"] ))
+  (is (= (decode "li1ee") [1]))
+  (is (= (decode "l4:Fish3:Cate") ["Fish" "Cat"]))
+  (is (= (decode "ll4:Fish3:Catee") [["Fish" "Cat"]]))
   ;; le -> :list-start :list-end
   ;; l4:Fishi10ee -> :list-start 4:Fish i10e :list-end
   )
