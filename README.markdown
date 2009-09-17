@@ -1,3 +1,7 @@
+# Current Status #
+
+BROKEN - In the middle of a refactor.
+
 # Note #
 
 This is currently a work in progress, only the encode stuff works, and
